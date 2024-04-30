@@ -11,6 +11,9 @@ To release a new version, please select a new version number (usually plus 1 to 
 
 Pending
 +++++++
+3.0.0b11
+++++++++
+* Fix duplicate calls to enable and disable Azure Container Storage when using aks-preview extension.
 
 3.0.0b10
 ++++++++
