@@ -358,6 +358,11 @@ disable_storage_pool_options = [
     CONST_ACSTOR_ALL,
 ]
 
+ephemeral_disk_volume_types = [
+    CONST_EPHEMERAL_VOLUME_ONLY,
+    CONST_PV_WITH_ANNOTATION,
+]
+
 # consts for guardrails level
 node_provisioning_modes = [
     CONST_NODE_PROVISIONING_MODE_MANUAL,
@@ -888,6 +893,11 @@ def load_arguments(self, _):
             help="set ephemeral disk storage pool option for azure container storage",
         )
         c.argument(
+            "ephemeral_disk_volume_type",
+            arg_type=get_enum_type(ephemeral_disk_volume_types),
+            help="set ephemeral disk volume type for azure container storage",
+        )
+        c.argument(
             "node_provisioning_mode",
             is_preview=True,
             arg_type=get_enum_type(node_provisioning_modes),
@@ -1312,6 +1322,11 @@ def load_arguments(self, _):
         c.argument(
             "azure_container_storage_nodepools",
             help="define the comma separated nodepool list to install azure container storage",
+        )
+        c.argument(
+            "ephemeral_disk_volume_type",
+            arg_type=get_enum_type(ephemeral_disk_volume_types),
+            help="set ephemeral disk volume type for azure container storage",
         )
         c.argument(
             "node_provisioning_mode",

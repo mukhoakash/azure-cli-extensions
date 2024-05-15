@@ -46,6 +46,7 @@ def perform_enable_azure_container_storage(  # pylint: disable=too-many-statemen
     storage_pool_sku,
     storage_pool_option,
     acstor_nodepool_skus,
+    ephemeral_disk_volume_type,
     is_cluster_create,
     is_extension_installed=False,
     is_azureDisk_enabled=False,
