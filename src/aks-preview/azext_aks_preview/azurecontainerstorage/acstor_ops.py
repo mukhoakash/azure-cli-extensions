@@ -7,6 +7,7 @@ from azure.cli.core.azclierror import UnknownError
 from azure.cli.core.commands import LongRunningOperation
 from azext_aks_preview.azurecontainerstorage._consts import (
     CONST_ACSTOR_K8S_EXTENSION_NAME,
+    CONST_EPHEMERAL_VOLUME_ONLY,
     CONST_EXT_INSTALLATION_NAME,
     CONST_K8S_EXTENSION_CLIENT_FACTORY_MOD_NAME,
     CONST_K8S_EXTENSION_CUSTOM_MOD_NAME,
@@ -109,6 +110,9 @@ def perform_enable_azure_container_storage(  # pylint: disable=too-many-statemen
             config_settings.append({"global.cli.storagePool.azureDisk.sku": storage_pool_sku})
             azure_disk_enabled = True
 
+    if ephemeral_disk_volume_type is None:
+        ephemeral_disk_volume_type = CONST_EPHEMERAL_VOLUME_ONLY
+
     config_settings.extend(
         [
             {"global.cli.activeControl": True},
@@ -121,6 +125,7 @@ def perform_enable_azure_container_storage(  # pylint: disable=too-many-statemen
             {"global.cli.storagePool.elasticSan.enabled": elastic_san_enabled},
             {"global.cli.storagePool.ephemeralDisk.nvme.enabled": ephemeral_disk_nvme_enabled},
             {"global.cli.storagePool.ephemeralDisk.temp.enabled": ephemeral_disk_localssd_enabled},
+            {"global.cli.storagePool.ephemeralDisk.ephemeralDiskVolumeType": ephemeral_disk_volume_type},
             # Always set cli.storagePool.disable.type to empty
             # and cli.storagePool.disable.validation to False
             # during enable operation so that any older disable
