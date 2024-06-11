@@ -11,9 +11,22 @@ To release a new version, please select a new version number (usually plus 1 to 
 
 Pending
 +++++++
-4.0.0b4
+* Update --enable-advanced-network-observability description to note additional costs and add missing flag to create command.
+* Add etag support (--if-match, --if-none-match) to some aks commands for optimistic concurrency control.
+
+4.0.0b6
 ++++++++
 * Add option `--ephemeral-disk-volume-type` to `az aks create` and `az aks update` for Azure Container Storage operations.
+* Add option `--azure-container-storage-perf-tier` to `az aks create` and `az aks update` to define resource tiers for Azure Container Storage performance.
+
+4.0.0b5
+++++++++
+* Add warnings to `az aks mesh` commands for out of support asm revision in use.
+
+4.0.0b4
+++++++++
+* Add `--vm-sizes` to `az aks create` and `az aks nodepool add`.
+* Add `az aks nodepool manual-scale add/update/delete` commands.
 
 4.0.0b3
 +++++++
@@ -24,6 +37,8 @@ Pending
 +++++++
 * Improve Windows OutboundNat test case by removing Windows OSSKU limitation
 * `az aks create/update`: add support for new outbound type none
+* Add `az operation show` command to show the details of a specific operation.
+* Add `az operation show-latest` command to show the details of the latest operation.
 
 4.0.0b1
 +++++++
