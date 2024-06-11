@@ -3377,6 +3377,8 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
             pool_option = self.context.raw_param.get("storage_pool_option")
             pool_sku = self.context.raw_param.get("storage_pool_sku")
             pool_size = self.context.raw_param.get("storage_pool_size")
+            ephemeral_disk_volume_type = self.context.raw_param.get("ephemeral_disk_volume_type")
+            ephemeral_disk_nvme_perf_tier = self.context.raw_param.get("ephemeral_disk_nvme_perf_tier")
             if not mc.agent_pool_profiles:
                 raise UnknownError("Encountered an unexpected error while getting the agent pools from the cluster.")
             agentpool = mc.agent_pool_profiles[0]
@@ -3392,6 +3394,15 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
             from azext_aks_preview.azurecontainerstorage._validators import (
                 validate_enable_azure_container_storage_params
             )
+            from azext_aks_preview.azurecontainerstorage._consts import (
+                CONST_ACSTOR_IO_ENGINE_LABEL_KEY,
+                CONST_ACSTOR_IO_ENGINE_LABEL_VAL,
+                CONST_DISK_TYPE_EPHEMERAL_VOLUME_ONLY,
+                CONST_EPHEMERAL_NVME_PERF_TIER_STANDARD,
+            )
+
+            default_ephemeral_disk_volume_type = CONST_DISK_TYPE_EPHEMERAL_VOLUME_ONLY
+            default_ephemeral_disk_nvme_perf_tier = CONST_EPHEMERAL_NVME_PERF_TIER_STANDARD
             validate_enable_azure_container_storage_params(
                 pool_type,
                 pool_name,
@@ -3405,13 +3416,13 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
                 False,
                 False,
                 False,
+                ephemeral_disk_volume_type,
+                ephemeral_disk_nvme_perf_tier,
+                default_ephemeral_disk_volume_type,
+                default_ephemeral_disk_nvme_perf_tier,
             )
 
             # Setup Azure Container Storage labels on the nodepool
-            from azext_aks_preview.azurecontainerstorage._consts import (
-                CONST_ACSTOR_IO_ENGINE_LABEL_KEY,
-                CONST_ACSTOR_IO_ENGINE_LABEL_VAL
-            )
             nodepool_labels = agentpool.node_labels
             if nodepool_labels is None:
                 nodepool_labels = {}
@@ -3421,6 +3432,16 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
             # set intermediates
             self.context.set_intermediate("enable_azure_container_storage", True, overwrite_exists=True)
             self.context.set_intermediate("azure_container_storage_nodepools", nodepool_list, overwrite_exists=True)
+            self.context.set_intermediate(
+                "current_ephemeral_nvme_perf_tier",
+                default_ephemeral_disk_nvme_perf_tier,
+                overwrite_exists=True
+            )
+            self.context.set_intermediate(
+                "existing_ephemeral_disk_volume_type",
+                default_ephemeral_disk_volume_type,
+                overwrite_exists=True
+            )
 
         return mc
 
@@ -3865,6 +3886,9 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
             pool_sku = self.context.raw_param.get("storage_pool_sku")
             pool_size = self.context.raw_param.get("storage_pool_size")
             ephemeral_disk_volume_type = self.context.raw_param.get("ephemeral_disk_volume_type")
+            ephemeral_disk_nvme_perf_tier = self.context.raw_param.get("ephemeral_disk_nvme_perf_tier")
+            existing_ephemeral_disk_volume_type = self.context.get_intermediate("existing_ephemeral_disk_volume_type")
+            existing_ephemeral_nvme_perf_tier = self.context.get_intermediate("current_ephemeral_nvme_perf_tier")
             kubelet_identity_object_id = cluster.identity_profile["kubeletidentity"].object_id
             node_resource_group = cluster.node_resource_group
             agent_pool_vm_sizes = []
@@ -3887,6 +3911,9 @@ class AKSPreviewManagedClusterCreateDecorator(AKSManagedClusterCreateDecorator):
                 pool_option,
                 agent_pool_vm_sizes,
                 ephemeral_disk_volume_type,
+                ephemeral_disk_nvme_perf_tier,
+                existing_ephemeral_disk_volume_type,
+                existing_ephemeral_nvme_perf_tier,
                 True,
                 is_called_from_extension=True,
             )
@@ -4088,6 +4115,8 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
         enable_azure_container_storage = enable_pool_type is not None
         disable_azure_container_storage = disable_pool_type is not None
         nodepool_list = self.context.raw_param.get("azure_container_storage_nodepools")
+        ephemeral_disk_volume_type = self.context.raw_param.get("ephemeral_disk_volume_type")
+        ephemeral_disk_nvme_perf_tier = self.context.raw_param.get("ephemeral_disk_nvme_perf_tier")
         if enable_azure_container_storage and disable_azure_container_storage:
             raise MutuallyExclusiveArgumentError(
                 'Conflicting flags. Cannot set --enable-azure-container-storage '
@@ -4116,6 +4145,8 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                 is_ephemeralDisk_localssd_enabled,
                 is_ephemeralDisk_nvme_enabled,
                 current_core_value,
+                existing_ephemeral_disk_volume_type,
+                existing_perf_tier,
             ) = get_extension_installed_and_cluster_configs(
                 self.cmd,
                 self.context.get_resource_group_name(),
@@ -4173,6 +4204,10 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                     is_elasticSan_enabled,
                     is_ephemeralDisk_localssd_enabled,
                     is_ephemeralDisk_nvme_enabled,
+                    ephemeral_disk_volume_type,
+                    ephemeral_disk_nvme_perf_tier,
+                    existing_ephemeral_disk_volume_type,
+                    existing_perf_tier,
                 )
 
                 # If the extension is already installed,
@@ -4200,6 +4235,7 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                 # set intermediates
                 self.context.set_intermediate("azure_container_storage_nodepools", nodepool_list, overwrite_exists=True)
                 self.context.set_intermediate("enable_azure_container_storage", True, overwrite_exists=True)
+
             if disable_azure_container_storage:
                 from azext_aks_preview.azurecontainerstorage._validators import (
                     validate_disable_azure_container_storage_params
@@ -4216,6 +4252,8 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                     is_elasticSan_enabled,
                     is_ephemeralDisk_localssd_enabled,
                     is_ephemeralDisk_nvme_enabled,
+                    ephemeral_disk_volume_type,
+                    ephemeral_disk_nvme_perf_tier,
                 )
 
                 is_pre_disable_validate_set = self.context.get_intermediate(
@@ -4263,6 +4301,17 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
             self.context.set_intermediate("is_extension_installed", is_extension_installed, overwrite_exists=True)
             self.context.set_intermediate("is_azureDisk_enabled", is_azureDisk_enabled, overwrite_exists=True)
             self.context.set_intermediate("is_elasticSan_enabled", is_elasticSan_enabled, overwrite_exists=True)
+            self.context.set_intermediate("current_core_value", current_core_value, overwrite_exists=True)
+            self.context.set_intermediate(
+                "current_ephemeral_nvme_perf_tier",
+                existing_perf_tier,
+                overwrite_exists=True
+            )
+            self.context.set_intermediate(
+                "existing_ephemeral_disk_volume_type",
+                existing_ephemeral_disk_volume_type,
+                overwrite_exists=True
+            )
             self.context.set_intermediate(
                 "is_ephemeralDisk_nvme_enabled",
                 is_ephemeralDisk_nvme_enabled,
@@ -4273,7 +4322,6 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                 is_ephemeralDisk_localssd_enabled,
                 overwrite_exists=True
             )
-            self.context.set_intermediate("current_core_value", current_core_value, overwrite_exists=True)
 
         return mc
 
@@ -5351,6 +5399,8 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
         is_ephemeralDisk_localssd_enabled = self.context.get_intermediate("is_ephemeralDisk_localssd_enabled")
         is_ephemeralDisk_nvme_enabled = self.context.get_intermediate("is_ephemeralDisk_nvme_enabled")
         current_core_value = self.context.get_intermediate("current_core_value")
+        existing_ephemeral_disk_volume_type = self.context.get_intermediate("existing_ephemeral_disk_volume_type")
+        existing_ephemeral_nvme_perf_tier = self.context.get_intermediate("current_ephemeral_nvme_perf_tier")
         pool_option = self.context.raw_param.get("storage_pool_option")
 
         # enable azure container storage
@@ -5367,6 +5417,7 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
             pool_size = self.context.raw_param.get("storage_pool_size")
             nodepool_list = self.context.get_intermediate("azure_container_storage_nodepools")
             ephemeral_disk_volume_type = self.context.raw_param.get("ephemeral_disk_volume_type")
+            ephemeral_disk_nvme_perf_tier = self.context.raw_param.get("ephemeral_disk_nvme_perf_tier")
             kubelet_identity_object_id = cluster.identity_profile["kubeletidentity"].object_id
             acstor_nodepool_skus = []
             for agentpool_profile in cluster.agent_pool_profiles:
@@ -5387,6 +5438,9 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                 pool_option,
                 acstor_nodepool_skus,
                 ephemeral_disk_volume_type,
+                ephemeral_disk_nvme_perf_tier,
+                existing_ephemeral_disk_volume_type,
+                existing_ephemeral_nvme_perf_tier,
                 False,
                 is_extension_installed,
                 is_azureDisk_enabled,
@@ -5417,6 +5471,8 @@ class AKSPreviewManagedClusterUpdateDecorator(AKSManagedClusterUpdateDecorator):
                 is_ephemeralDisk_localssd_enabled,
                 is_ephemeralDisk_nvme_enabled,
                 current_core_value,
+                existing_ephemeral_disk_volume_type,
+                existing_ephemeral_nvme_perf_tier,
                 is_called_from_extension=True,
             )
 

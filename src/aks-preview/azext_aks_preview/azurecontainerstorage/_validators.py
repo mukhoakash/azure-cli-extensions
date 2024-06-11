@@ -50,6 +50,8 @@ def validate_disable_azure_container_storage_params(
     is_elasticSan_enabled,
     is_ephemeralDisk_localssd_enabled,
     is_ephemeralDisk_nvme_enabled,
+    ephemeral_disk_volume_type,
+    ephemeral_disk_nvme_perf_tier,
 ):
     if not is_extension_installed:
         raise InvalidArgumentValueError(
@@ -72,6 +74,18 @@ def validate_disable_azure_container_storage_params(
     if storage_pool_size is not None:
         raise MutuallyExclusiveArgumentError(
             'Conflicting flags. Cannot define --storage-pool-size value '
+            'when --disable-azure-container-storage is set.'
+        )
+
+    if ephemeral_disk_volume_type is not None:
+        raise MutuallyExclusiveArgumentError(
+            'Conflicting flags. Cannot define --ephemeral-disk-volume-type value '
+            'when --disable-azure-container-storage is set.'
+        )
+
+    if ephemeral_disk_nvme_perf_tier is not None:
+        raise MutuallyExclusiveArgumentError(
+            'Conflicting flags. Cannot define --ephemeral-disk-nvme-perf-tier value '
             'when --disable-azure-container-storage is set.'
         )
 
@@ -168,6 +182,10 @@ def validate_enable_azure_container_storage_params(
     is_elasticSan_enabled,
     is_ephemeralDisk_localssd_enabled,
     is_ephemeralDisk_nvme_enabled,
+    ephemeral_disk_volume_type,
+    ephemeral_disk_nvme_perf_tier,
+    existing_ephemeral_disk_volume_type,
+    existing_ephemeral_disk_nvme_perf_tier,
 ):
     if storage_pool_name is not None:
         pattern = r'[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
@@ -195,7 +213,9 @@ def validate_enable_azure_container_storage_params(
             )
 
     if storage_pool_type == CONST_STORAGE_POOL_TYPE_EPHEMERAL_DISK:
-        if storage_pool_option is None:
+        is_ephemeral_used_for_disk_volume_type = ephemeral_disk_volume_type is not None and \
+        is_extension_installed and (is_ephemeralDisk_localssd_enabled or is_ephemeralDisk_nvme_enabled)
+        if storage_pool_option is None and not is_ephemeral_used_for_disk_volume_type:
             raise RequiredArgumentMissingError(
                 'Value of --storage-pool-option must be defined when '
                 '--enable-azure-container-storage is set to ephemeralDisk.'
@@ -205,11 +225,57 @@ def validate_enable_azure_container_storage_params(
                 f'Cannot set --storage-pool-option value as {CONST_ACSTOR_ALL} '
                 'when --enable-azure-container-storage is set.'
             )
+
+        if is_ephemeral_used_for_disk_volume_type and \
+           (storage_pool_name is not None or storage_pool_sku is not None or
+            storage_pool_size is not None or nodepool_list is not None):
+            enabled_options_arr = []
+            if is_ephemeralDisk_nvme_enabled:
+                enabled_options_arr.append(CONST_STORAGE_POOL_OPTION_NVME)
+            if is_ephemeralDisk_localssd_enabled:
+                enabled_options_arr.append(CONST_STORAGE_POOL_OPTION_SSD)
+            enabled_options = ', '.join(enabled_options_arr)
+
+            params_defined_arr = []
+            if storage_pool_size is not None:
+                params_defined_arr.append('--storage-pool-size')
+            if storage_pool_sku is not None:
+                params_defined_arr.append('--storage-pool-sku')
+            if storage_pool_name is not None:
+                params_defined_arr.append('--storage-pool-name')
+            if nodepool_list is not None:
+                params_defined_arr.append('--azure-container-storage-nodepools')
+
+            params = ', '.join(params_defined_arr)
+
+            raise ArgumentUsageError(
+                f'Cannot set {params} to define storage pool parameters while setting --ephemeral-disk-volume-type '
+                f'flag since {CONST_STORAGE_POOL_TYPE_EPHEMERAL_DISK} storage pool type is already enabled for '
+                f'option {enabled_options}.'
+            )
+
+        if is_ephemeral_used_for_disk_volume_type and \
+           existing_ephemeral_disk_volume_type.lower() == ephemeral_disk_volume_type.lower():
+            raise InvalidArgumentValueError(
+                'Azure Container Storage is already configured with --ephemeral-disk-volume-type '
+                f'value set to {existing_ephemeral_disk_volume_type}.'
+            )
     else:
         if storage_pool_option is not None:
             raise ArgumentUsageError(
                 'Cannot set --storage-pool-option when --enable-azure-container-storage is not ephemeralDisk.'
             )
+
+        if ephemeral_disk_volume_type is not None:
+            raise ArgumentUsageError(
+                'Cannot set --ephemeral-disk-volume-type when --enable-azure-container-storage is not ephemeralDisk.'
+            )
+
+        if ephemeral_disk_nvme_perf_tier is not None:
+            raise ArgumentUsageError(
+                'Cannot set --ephemeral-disk-nvme-perf-tier when --enable-azure-container-storage is not ephemeralDisk.'
+            )
+
 
     _validate_storage_pool_size(storage_pool_size, storage_pool_type)
 
@@ -220,6 +286,24 @@ def validate_enable_azure_container_storage_params(
         storage_pool_option,
         is_extension_installed
     )
+
+    if ephemeral_disk_nvme_perf_tier is not None:
+        can_define_tier = (is_extension_installed and is_ephemeralDisk_nvme_enabled) or \
+            (storage_pool_type == CONST_STORAGE_POOL_TYPE_EPHEMERAL_DISK and 
+             storage_pool_option == CONST_STORAGE_POOL_OPTION_NVME)
+
+        if not can_define_tier:
+            raise ArgumentUsageError(
+                'Cannot set --ephemeral-disk-nvme-perf-tier when storage pool type: '
+                f'{CONST_STORAGE_POOL_TYPE_EPHEMERAL_DISK} option: {CONST_STORAGE_POOL_OPTION_NVME} '
+                'is not enabled for Azure Container Storage.'
+            )
+
+        if existing_ephemeral_disk_nvme_perf_tier.lower() == ephemeral_disk_nvme_perf_tier.lower():
+            raise InvalidArgumentValueError(
+                'Azure Container Storage is already configured with --ephemeral-disk-nvme-perf-tier '
+                f'value set to {existing_ephemeral_disk_nvme_perf_tier}.'
+            )
 
     if is_extension_installed:
         if (is_azureDisk_enabled and
@@ -233,6 +317,7 @@ def validate_enable_azure_container_storage_params(
             )
 
         if storage_pool_type == CONST_STORAGE_POOL_TYPE_EPHEMERAL_DISK and \
+           not is_ephemeral_used_for_disk_volume_type and \
            ((is_ephemeralDisk_nvme_enabled and
             storage_pool_option == CONST_STORAGE_POOL_OPTION_NVME) or
             (is_ephemeralDisk_localssd_enabled and
